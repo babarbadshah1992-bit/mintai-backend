@@ -1,60 +1,71 @@
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+)
+
 export default async function handler(req, res) {
 
-  // CORS fix (VERY IMPORTANT)
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // CORS fix
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end()
   }
 
   try {
-    // GET request support (browser test)
-    let userMessage = "";
 
-    if (req.method === "GET") {
-      userMessage = req.query.msg || "Hello";
-    }
+    // 🔹 GET → check connection
+    if (req.method === 'GET') {
 
-    // POST request support (website chat)
-    if (req.method === "POST") {
-      userMessage = req.body.message;
-    }
+      const { data, error } = await supabase
+        .from('blogs')
+        .select('*')
+        .limit(5)
 
-    if (!userMessage) {
-      return res.status(400).json({ reply: "Message missing" });
-    }
+      if (error) {
+        return res.status(500).json({ error })
+      }
 
-    // OpenAI call
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: "You are a helpful beauty and health assistant for Indian and international users."
-          },
-          {
-            role: "user",
-            content: userMessage
-          }
-        ],
-        temperature: 0.7
+      return res.status(200).json({
+        message: "Supabase Connected ✅",
+        data
       })
-    });
+    }
 
-    const data = await response.json();
-    const reply = data.choices[0].message.content;
+    // 🔹 POST → insert blog
+    if (req.method === 'POST') {
 
-    res.status(200).json({ reply });
+      const { title, content } = req.body
 
-  } catch (error) {
-    res.status(500).json({ reply: "Server error" });
+      const { data, error } = await supabase
+        .from('blogs')
+        .insert([
+          {
+            title,
+            slug: title.toLowerCase().replace(/\s+/g, '-'),
+            content,
+            meta_description: content.substring(0, 100),
+            category: "General"
+          }
+        ])
+
+      if (error) {
+        return res.status(500).json({ error })
+      }
+
+      return res.status(200).json({
+        message: "Blog inserted successfully 🚀",
+        data
+      })
+    }
+
+    return res.status(405).json({ message: "Method Not Allowed" })
+
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
   }
 }
